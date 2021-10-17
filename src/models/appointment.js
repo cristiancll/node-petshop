@@ -1,71 +1,65 @@
-const connection = require('../infraestructure/connection')
 const moment = require('moment')
+const repository = require('../repository/appointment')
 
 class Appointment {
-    create(appointment, res){
-        const creationDate = moment().format('YYYY-MM-DD HH:MM:SS');
-        const date = moment(appointment.data, 'DD/MM/YYYY').format('YYYY-MM-DD HH:MM:SS')
-
-        const isValidDate = moment(date).isSameOrAfter(creationDate);
-        const isValidName = appointment.client.length >= 5;
-
-        const validations = [
+    constructor(){
+        this.isValidDate = (date, creationDate) => moment(date).isSameOrAfter(creationDate);
+        this.isValidTaxpayerId = (size) => size !== 11;
+        this.validate = (parameters) => {
+            this.validations.filter(field => {
+              const {name} = field.name;
+              const parameter = parameters[name];
+              return !field.valid(parameter);
+            })
+        };
+        this.validations = [
             {
                 name: 'date',
-                valid: isValidDate,
+                valid: this.isValidDate,
                 message: 'Date should be posterior to current date',
             },{
                 name: 'client',
-                valid: isValidName,
-                message: 'Client name should have at least 5 characters',
+                valid: this.isValidTaxpayerId,
+                message: 'Client taxpayer id should have exactly 11 characters',
             }
         ];
-        const errors = validations.filter(field => !field.valid);
+    }
+
+    insert(appointment){
+        const creationDate = moment().format('YYYY-MM-DD HH:MM:SS');
+        const date = moment(appointment.data, 'DD/MM/YYYY').format('YYYY-MM-DD HH:MM:SS')
+
+        const parameters = {
+            data: {date, creationDate},
+            client: {size: appointment.client.length},
+        }
+        const errors = this.validate(parameters);
+
         if(errors.length){
-            res.status(400).json(errors);
+            return new Promise((resolve, reject) => reject(errors));
         }else{
-            const entity = {...atendimento, creationDate};
-            const query = `INSERT INTO Appointment SET ?`;
-            connection.query(query, entity , (error, result) => {
-                if(error) res.status(400).json(error);
-                else res.status(201).json(appointment);
-            });
+            const entity = {...appointment, creationDate};
+            return repository.insert(entity)
+                .then((result) => {
+                    const id = result.id;
+                    return ({...appointment, id});
+                });
         }
     }
-    list(res){
-        const query = "SELECT * FROM Appointment";
-        connection.query(query, (error, results) => {
-            if(error) res.status(400).json(error)
-            else res.status(200).json(results)
-        });
+    list(){
+        return repository.list();
     }
 
-    getById(id, res){
-        const query = "SELECT * FROM Appointment WHERE id=${id}";
-        connection.query(query, (error, results) => {
-            if(error) res.status(400).json(error);
-            else res.status(200).json(results[0]);
-        });
+    getById(id){
+        return repository.getById(id);
     }
 
-    edit(id, values, res) {
-        if(values.date) {
-            values.date = moment(values.date, 'DD/MM/YYYY').format('YYYY-MM-DD HH:MM:SS')
-        }
-        const query = 'UPDATE Appointment SET ? WHERE id=?'
-        connection.query(query, [values, id], (error, results) => {
-            if(error) res.status(400).json(error)
-            else res.status(200).json({...values, id})
-        })
+    edit(id, values) {
+        return repository.edit(id, values);
     }
 
     delete(id, res) {
-        const query = 'DELETE FROM Appointment WHERE id=?'
-
-        connection.query(query, id, (error, results) => {
-            if(error) res.status(400).json(error)
-            else res.status(200).json({id})
-        })
+        return repository.delete(id);
     }
 
 }
